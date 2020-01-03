@@ -80,8 +80,7 @@ class Attention(nn.Module):
     Attention model for Pointer-Net
     """
 
-    def __init__(self, input_dim,
-                 hidden_dim):
+    def __init__(self, input_dim, hidden_dim):
         """
         Initiate Attention
 
@@ -131,7 +130,6 @@ class Attention(nn.Module):
         if len(att[mask]) > 0:
             att[mask] = self.inf[mask]
         alpha = self.softmax(att)
-
         hidden_state = torch.bmm(ctx, alpha.unsqueeze(2)).squeeze(2)
 
         return hidden_state, alpha
@@ -153,11 +151,9 @@ class Decoder(nn.Module):
         :param int embedding_dim: Number of embeddings in Pointer-Net
         :param int hidden_dim: Number of hidden units for the decoder's RNN
         """
-
         super(Decoder, self).__init__()
         self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
-
         self.input_to_hidden = nn.Linear(embedding_dim, 4 * hidden_dim)
         self.hidden_to_hidden = nn.Linear(hidden_dim, 4 * hidden_dim)
         self.hidden_out = nn.Linear(hidden_dim * 2, hidden_dim)
@@ -255,10 +251,10 @@ class Decoder(nn.Module):
 
 
 class PointerNet(nn.Module):
+
     """
     Pointer-Net
     """
-
     def __init__(self, embedding_dim,
                  hidden_dim,
                  lstm_layers,
@@ -309,8 +305,9 @@ class PointerNet(nn.Module):
         encoder_outputs, encoder_hidden = self.encoder(embedded_inputs,
                                                        encoder_hidden0)
         if self.bidir:
-            decoder_hidden0 = (torch.cat(encoder_hidden[0][-2:], dim=-1),
-                               torch.cat(encoder_hidden[1][-2:], dim=-1))
+            # decoder_hidden0 = (torch.cat(encoder_hidden[0][-2:], dim=-1),
+            #                    torch.cat(encoder_hidden[1][-2:], dim=-1))
+            decoder_hidden0 = (torch.cat([encoder_hidden[0][-2:] , encoder_hidden[1][-2:]], dim=-1))
         else:
             decoder_hidden0 = (encoder_hidden[0][-1],
                                encoder_hidden[1][-1])

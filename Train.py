@@ -1,11 +1,7 @@
 """
-
 Pytorch implementation of Pointer Network.
-
 http://arxiv.org/pdf/1506.03134v1.pdf.
-
 """
-
 import torch
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
@@ -19,20 +15,28 @@ from tqdm import tqdm
 from PointerNet import PointerNet
 from Data_Generator import TSPDataset
 
+import warnings
+warnings.filterwarnings("ignore")
+
 parser = argparse.ArgumentParser(description="Pytorch implementation of Pointer-Net")
 
 # Data
-parser.add_argument('--train_size', default=1000000, type=int, help='Training data size')
-parser.add_argument('--val_size', default=10000, type=int, help='Validation data size')
-parser.add_argument('--test_size', default=10000, type=int, help='Test data size')
-parser.add_argument('--batch_size', default=256, type=int, help='Batch size')
+parser.add_argument('--train_size', default=100000, type=int, help='Training data size') # 1000000
+parser.add_argument('--val_size', default=10, type=int, help='Validation data size')  # 10000
+parser.add_argument('--test_size', default=10, type=int, help='Test data size') # 10000
+parser.add_argument('--batch_size', default=5, type=int, help='Batch size')
+parser.add_argument('--parallel', default=False, type=bool, help='Batch size')
+
 # Train
-parser.add_argument('--nof_epoch', default=50000, type=int, help='Number of epochs')
+parser.add_argument('--nof_epoch', default=200, type=int, help='Number of epochs')
 parser.add_argument('--lr', type=float, default=0.0001, help='Learning rate')
+
 # GPU
 parser.add_argument('--gpu', default=True, action='store_true', help='Enable gpu')
+
 # TSP
 parser.add_argument('--nof_points', type=int, default=5, help='Number of points in TSP')
+
 # Network
 parser.add_argument('--embedding_size', type=int, default=128, help='Embedding size')
 parser.add_argument('--hiddens', type=int, default=512, help='Number of hidden units')
@@ -54,29 +58,39 @@ model = PointerNet(params.embedding_size,
                    params.dropout,
                    params.bidir)
 
-dataset = TSPDataset(params.train_size,
-                     params.nof_points)
+# train_dataset = TSPDataset(params.train_size, params.nof_points, data_file_path='data/tsp5.txt')
+# test_dataset = TSPDataset(params.test_size, params.nof_points, data_file_path='data/tsp5_test.txt')
 
-dataloader = DataLoader(dataset,
-                        batch_size=params.batch_size,
-                        shuffle=True,
-                        num_workers=4)
+train_dataset = TSPDataset(params.train_size, params.nof_points)
+test_dataset = TSPDataset(params.test_size, params.nof_points)
+
+train_dataloader = DataLoader(train_dataset, batch_size=params.batch_size, shuffle=True)
+test_dataloader = DataLoader(test_dataset, batch_size=params.batch_size, shuffle=True)
 
 if USE_CUDA:
     model.cuda()
-    net = torch.nn.DataParallel(model, device_ids=range(torch.cuda.device_count()))
+    if params.parallel:
+        net = torch.nn.DataParallel(model, device_ids=range(torch.cuda.device_count()))
+    else:
+        net = model
     cudnn.benchmark = True
 
 CCE = torch.nn.CrossEntropyLoss()
-model_optim = optim.Adam(filter(lambda p: p.requires_grad,
-                                model.parameters()),
-                         lr=params.lr)
+
+model_optim = None
+
+if params.parallel:
+    model_optim = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),
+                             lr=params.lr, num_workers=8)
+else:
+    model_optim = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),
+                             lr=params.lr)
 
 losses = []
 
 for epoch in range(params.nof_epoch):
     batch_loss = []
-    iterator = tqdm(dataloader, unit='Batch')
+    iterator = tqdm(train_dataloader, unit='Batch')
 
     for i_batch, sample_batched in enumerate(iterator):
         iterator.set_description('Batch %i/%i' % (epoch+1, params.nof_epoch))
@@ -95,13 +109,17 @@ for epoch in range(params.nof_epoch):
 
         loss = CCE(o, target_batch)
 
-        losses.append(loss.data[0])
-        batch_loss.append(loss.data[0])
+        # losses.append(loss.data[0])
+        # batch_loss.append(loss.data[0])
+        losses.append(loss.item())
+        batch_loss.append(loss.item())
 
         model_optim.zero_grad()
         loss.backward()
         model_optim.step()
 
-        iterator.set_postfix(loss='{}'.format(loss.data[0]))
+        # iterator.set_postfix(loss='{}'.format(loss.data[0]))
+        iterator.set_postfix(loss='{}'.format(loss.item()))
 
     iterator.set_postfix(loss=np.average(batch_loss))
+
