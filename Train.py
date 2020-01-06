@@ -64,8 +64,18 @@ test_dataset = TSPDataset(params.test_size, params.nof_points, data_file_path='d
 # train_dataset = TSPDataset(params.train_size, params.nof_points)
 # test_dataset = TSPDataset(params.test_size, params.nof_points)
 
-train_dataloader = DataLoader(train_dataset, batch_size=params.batch_size, shuffle=True)
-test_dataloader = DataLoader(test_dataset, batch_size=params.batch_size, shuffle=True)
+train_dataloader = None
+test_dataloader = None
+
+if params.parallel:
+    train_dataloader = DataLoader(train_dataset, batch_size=params.batch_size, shuffle=True, num_workers=8)
+else:
+    train_dataloader = DataLoader(train_dataset, batch_size=params.batch_size, shuffle=True)
+
+if params.parallel:
+    test_dataloader = DataLoader(test_dataset, batch_size=params.batch_size, shuffle=True, num_workers=8)
+else:
+    test_dataloader = DataLoader(test_dataset, batch_size=params.batch_size, shuffle=True)
 
 if USE_CUDA:
     model.cuda()
@@ -77,15 +87,8 @@ if USE_CUDA:
 
 CCE = torch.nn.CrossEntropyLoss()
 
-model_optim = None
-
-if params.parallel:
-    model_optim = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),
-                             lr=params.lr, num_workers=8)
-else:
-    model_optim = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),
+model_optim = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),
                              lr=params.lr)
-
 losses = []
 
 for epoch in range(params.nof_epoch):
