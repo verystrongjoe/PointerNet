@@ -5,7 +5,6 @@ import itertools
 from tqdm import tqdm
 
 
-
 # https://drive.google.com/drive/folders/0B2fg8yPGn2TCMzBtS0o4Q2RJaEU
 def tsp_opt(points):
     """
@@ -68,6 +67,8 @@ class TSPDataset(Dataset):
         num_line, num_points = self._get_data_shape(data_file_path)
         num_line = min(num_line, self.data_size)
 
+        print('( {}, {} ) : data size of points is fixed'.format(num_line, self.data_size))
+
         self.seqs = np.empty((num_line, num_points, 2))
         self.len_seq = np.empty(num_line, dtype=np.long)
         self.labels = np.empty((num_line, num_points), dtype=np.long)
@@ -79,7 +80,7 @@ class TSPDataset(Dataset):
                     break
                 self.seqs[idx, ...], self.len_seq[idx], self.labels[idx, ...] = self._get_data_from_line(line)
 
-        return {'Points_List': self.seqs[idx, ...], 'Solutions': self.labels[idx, ...]}
+        return {'Points_List': self.seqs[:idx+1, ...], 'Solutions': self.labels[:idx+1, ...]}
 
 
     def _get_data_from_line(self, line):
