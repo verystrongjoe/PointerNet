@@ -38,8 +38,7 @@ class Encoder(nn.Module):
         self.h0 = Parameter(torch.zeros(1), requires_grad=False)
         self.c0 = Parameter(torch.zeros(1), requires_grad=False)
 
-    def forward(self, embedded_inputs,
-                hidden):
+    def forward(self, embedded_inputs, hidden):
         """
         Encoder - Forward-pass
 
@@ -47,11 +46,8 @@ class Encoder(nn.Module):
         :param Tensor hidden: Initiated hidden units for the LSTMs (h, c)
         :return: LSTMs outputs and hidden units (h, c)
         """
-
         embedded_inputs = embedded_inputs.permute(1, 0, 2)
-
         outputs, hidden = self.lstm(embedded_inputs, hidden)
-
         return outputs.permute(1, 0, 2), hidden
 
     def init_hidden(self, embedded_inputs):
@@ -61,7 +57,6 @@ class Encoder(nn.Module):
         :param Tensor embedded_inputs: The embedded input of Pointer-NEt
         :return: Initiated hidden units for the LSTMs (h, c)
         """
-
         batch_size = embedded_inputs.size(0)
 
         # Reshaping (Expanding)
@@ -71,20 +66,19 @@ class Encoder(nn.Module):
         c0 = self.h0.unsqueeze(0).unsqueeze(0).repeat(self.n_layers,
                                                       batch_size,
                                                       self.hidden_dim)
-
         return h0, c0
 
 
 class Attention(nn.Module):
+
     """
     Attention model for Pointer-Net
     """
-
     def __init__(self, input_dim, hidden_dim):
         """
         Initiate Attention
 
-        :param int input_dim: Input's diamention
+        :param int input_dim: Input's dimension
         :param int hidden_dim: Number of hidden units in the attention
         """
 
@@ -95,6 +89,7 @@ class Attention(nn.Module):
 
         self.input_linear = nn.Linear(input_dim, hidden_dim)
         self.context_linear = nn.Conv1d(input_dim, hidden_dim, 1, 1)
+
         self.V = Parameter(torch.FloatTensor(hidden_dim), requires_grad=True)
         self._inf = Parameter(torch.FloatTensor([float('-inf')]), requires_grad=False)
         self.tanh = nn.Tanh()
@@ -103,9 +98,7 @@ class Attention(nn.Module):
         # Initialize vector V
         nn.init.uniform(self.V, -1, 1)
 
-    def forward(self, input,
-                context,
-                mask):
+    def forward(self, input, context, mask):
         """
         Attention - Forward-pass
 
@@ -114,12 +107,10 @@ class Attention(nn.Module):
         :param ByteTensor mask: Selection mask
         :return: tuple of - (Attentioned hidden state, Alphas)
         """
+        inp = self.input_linear(input).unsqueeze(2).expand(-1, -1, context.size(1)) # (batch, hidden_dim, seq_len)
 
         # (batch, hidden_dim, seq_len)
-        inp = self.input_linear(input).unsqueeze(2).expand(-1, -1, context.size(1))
-
-        # (batch, hidden_dim, seq_len)
-        context = context.permute(0, 2, 1)
+        context = context.permute(0, 2, 1)  # todo : batch, hidden_seq,
         ctx = self.context_linear(context)
 
         # (batch, 1, hidden_dim)
@@ -193,6 +184,8 @@ class Decoder(nn.Module):
         outputs = []
         pointers = []
 
+
+        # lstm?
         def step(x, hidden):
             """
             Recurrence step function
@@ -206,7 +199,7 @@ class Decoder(nn.Module):
             h, c = hidden
 
             gates = self.input_to_hidden(x) + self.hidden_to_hidden(h)
-            input, forget, cell, out = gates.chunk(4, 1)
+            input, forget, cell, out = gates.chunk(4, 1)  # todo : check
 
             input = F.sigmoid(input)
             forget = F.sigmoid(forget)
@@ -224,18 +217,18 @@ class Decoder(nn.Module):
 
         # Recurrence loop
         for _ in range(input_length):
-            h_t, c_t, outs = step(decoder_input, hidden)
+            h_t, c_t, outs = step(decoder_input, hidden)  # hidden, output
             hidden = (h_t, c_t)
 
             # Masking selected inputs
-            masked_outs = outs * mask
+            masked_outs = outs * mask  # todo :
 
             # Get maximum probabilities and indices
             max_probs, indices = masked_outs.max(1)
-            one_hot_pointers = (runner == indices.unsqueeze(1).expand(-1, outs.size()[1])).float()
+            one_hot_pointers = (runner == indices.unsqueeze(1).expand(-1, outs.size(1))).float()
 
             # Update mask to ignore seen indices
-            mask  = mask * (1 - one_hot_pointers)
+            mask = mask * (1 - one_hot_pointers)
 
             # Get embedded inputs by max indices
             embedding_mask = one_hot_pointers.unsqueeze(2).expand(-1, -1, self.embedding_dim).byte()
@@ -274,6 +267,7 @@ class PointerNet(nn.Module):
         self.embedding_dim = embedding_dim
         self.bidir = bidir
         self.embedding = nn.Linear(2, embedding_dim)
+        # self.embedding = nn.Embedding(2, embedding_dim)
         self.encoder = Encoder(embedding_dim,
                                hidden_dim,
                                lstm_layers,
@@ -296,18 +290,20 @@ class PointerNet(nn.Module):
         batch_size = inputs.size(0)
         input_length = inputs.size(1)
 
-        decoder_input0 = self.decoder_input0.unsqueeze(0).expand(batch_size, -1)
+        decoder_input0 = self.decoder_input0.unsqueeze(0).expand(batch_size, -1)  # (batch_size, embedding size)
 
         inputs = inputs.view(batch_size * input_length, -1)
         embedded_inputs = self.embedding(inputs).view(batch_size, input_length, -1)
 
         encoder_hidden0 = self.encoder.init_hidden(embedded_inputs)
-        encoder_outputs, encoder_hidden = self.encoder(embedded_inputs,
-                                                       encoder_hidden0)
+        encoder_outputs, encoder_hidden = self.encoder(embedded_inputs, encoder_hidden0)
+
         if self.bidir:
-            # decoder_hidden0 = (torch.cat(encoder_hidden[0][-2:], dim=-1),
-            #                    torch.cat(encoder_hidden[1][-2:], dim=-1))
-            decoder_hidden0 = (torch.cat([encoder_hidden[0][-2:] , encoder_hidden[1][-2:]], dim=-1))
+            decoder_hidden0 = (
+                torch.cat([encoder_hidden[0][-2:]], dim=-1),
+                torch.cat([encoder_hidden[1][-2:]], dim=-1)
+            )
+
         else:
             decoder_hidden0 = (encoder_hidden[0][-1],
                                encoder_hidden[1][-1])
@@ -316,4 +312,4 @@ class PointerNet(nn.Module):
                                                            decoder_hidden0,
                                                            encoder_outputs)
 
-        return  outputs, pointers
+        return outputs, pointers

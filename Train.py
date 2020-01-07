@@ -2,13 +2,14 @@
 Pytorch implementation of Pointer Network.
 http://arxiv.org/pdf/1506.03134v1.pdf.
 """
+import numpy as np
+
 import torch
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 
-import numpy as np
 import argparse
 from tqdm import tqdm
 
@@ -17,6 +18,11 @@ from Data_Generator import TSPDataset
 
 import warnings
 warnings.filterwarnings("ignore")
+
+from torch.utils.tensorboard import SummaryWriter
+
+writer = SummaryWriter()
+
 
 parser = argparse.ArgumentParser(description="Pytorch implementation of Pointer-Net")
 
